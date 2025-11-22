@@ -1,0 +1,11 @@
+[package]
+name = "aniruntime"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anicore = { path = "../anicore" }
+tokio = { workspace = true }
+anyhow = "1.0"
+dotenv = "0.15"
+
