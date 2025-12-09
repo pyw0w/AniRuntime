@@ -1,0 +1,22 @@
+{
+  "cores": ["discord"],
+  "cores_directory": "./build/cores",
+  "core_configs": {
+    "discord": {
+      "enabled": true,
+      "config": {
+        "token": "",
+        "developers_guild_id": ""
+      }
+    }
+  },
+  "plugins": {
+    "enabled": ["example", "commands"],
+    "directory": "./build/plugins"
+  },
+  "security": {
+    "verify_hashes": false,
+    "allowed_paths": ["./build/plugins", "./build/cores"]
+  },
+  "log_level": "info"
+}
