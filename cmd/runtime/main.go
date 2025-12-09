@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/pyw0w/AniApi/shared"
 	"github.com/pyw0w/AniCore/pkg/config"
 	coreloader "github.com/pyw0w/AniCore/pkg/coreloader"
+	"github.com/pyw0w/AniCore/pkg/database"
 	"github.com/pyw0w/AniCore/pkg/eventbus"
 	"github.com/pyw0w/AniCore/pkg/logger"
 	pluginloader "github.com/pyw0w/AniCore/pkg/pluginloader"
@@ -33,6 +35,7 @@ type Runtime struct {
 	coreAPIs     map[string]*CoreAPIImpl
 	log          *logger.Logger
 	coreVersion  string
+	database     *database.DB
 }
 
 // CoreAPIImpl реализует shared.CoreAPI для плагинов
@@ -55,6 +58,10 @@ func (api *CoreAPIImpl) CallCore(coreName string, cmd shared.Event) error {
 		return fmt.Errorf("core %s not found", coreName)
 	}
 	return core.OnCommand(cmd)
+}
+
+func (api *CoreAPIImpl) Database() shared.DatabaseAPI {
+	return api.runtime.GetDatabaseAPI(api.plugin.Name())
 }
 
 // RuntimeAPIImpl реализует shared.RuntimeAPI для core-модулей
@@ -89,6 +96,13 @@ func (api *RuntimeAPIImpl) GetCoreVersion() string {
 	return api.runtime.GetCoreVersion()
 }
 
+func (api *RuntimeAPIImpl) GetDatabase() *sql.DB {
+	if api.runtime.database == nil {
+		return nil
+	}
+	return api.runtime.database.DB
+}
+
 // NewRuntime создает новый Runtime
 func NewRuntime(cfg *config.Config) *Runtime {
 	bus := eventbus.NewEventBus()
@@ -109,6 +123,22 @@ func NewRuntime(cfg *config.Config) *Runtime {
 	logLevel := logger.ParseLevel(cfg.LogLevel)
 	runtimeLog := logger.New("Runtime", logLevel)
 
+	// Инициализация БД (если backend включен)
+	var db *database.DB
+	if cfg.Backend != nil && cfg.Backend.Enabled {
+		dbPath := cfg.Backend.Database.Path
+		if dbPath == "" {
+			dbPath = "./data/anicore.db"
+		}
+		var err error
+		db, err = database.NewDB(dbPath)
+		if err != nil {
+			runtimeLog.Warn("Failed to initialize database: %v", err)
+		} else {
+			runtimeLog.Info("Database initialized: %s", dbPath)
+		}
+	}
+
 	return &Runtime{
 		config:       cfg,
 		eventBus:     bus,
@@ -120,6 +150,7 @@ func NewRuntime(cfg *config.Config) *Runtime {
 		coreAPIs:     make(map[string]*CoreAPIImpl),
 		log:          runtimeLog,
 		coreVersion:  coreVersion,
+		database:     db,
 	}
 }
 
@@ -128,7 +159,12 @@ func (r *Runtime) LoadCores() error {
 	r.log.Info("Loading core modules...")
 
 	for _, coreName := range r.config.Cores {
-		corePath := filepath.Join(r.config.CoresDirectory, coreName+".so")
+		// Используем CoreDirectory, если указан, иначе CoresDirectory (обратная совместимость)
+		coreDir := r.config.CoreDirectory
+		if coreDir == "" {
+			coreDir = r.config.CoresDirectory
+		}
+		corePath := filepath.Join(coreDir, coreName+".so")
 
 		r.log.Info("Loading core: %s from %s", coreName, corePath)
 
@@ -292,6 +328,15 @@ func (r *Runtime) GetPluginCommands() []*discordgo.ApplicationCommand {
 // GetCoreVersion возвращает версию ядра
 func (r *Runtime) GetCoreVersion() string {
 	return r.coreVersion
+}
+
+// GetDatabaseAPI возвращает DatabaseAPI для плагина
+func (r *Runtime) GetDatabaseAPI(pluginID string) shared.DatabaseAPI {
+	if r.database == nil {
+		// Возвращаем nil, если БД не инициализирована
+		return nil
+	}
+	return database.NewDatabaseAPI(r.database.DB, pluginID)
 }
 
 // Run запускает runtime
