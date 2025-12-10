@@ -3,7 +3,7 @@ module github.com/pyw0w/AniRuntime
 go 1.25.5
 
 require (
-	github.com/bwmarrin/discordgo v0.28.1
+	github.com/bwmarrin/discordgo v0.29.0
 	github.com/pyw0w/AniApi v0.1.0
 	github.com/pyw0w/AniCore v0.1.0
 )

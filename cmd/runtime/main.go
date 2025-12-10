@@ -228,6 +228,26 @@ func (r *Runtime) StopCores() error {
 	return nil
 }
 
+func (r *Runtime) upsertPluginRecord(id, name, version string, enabled bool) {
+	if r.database == nil || r.database.DB == nil {
+		return
+	}
+
+	query := `
+		INSERT INTO plugins (id, name, version, enabled, loaded_at, updated_at)
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			version = excluded.version,
+			enabled = excluded.enabled,
+			updated_at = CURRENT_TIMESTAMP
+	`
+
+	if _, err := r.database.DB.Exec(query, id, name, version, enabled); err != nil {
+		r.log.Warn("Failed to upsert plugin record %s: %v", id, err)
+	}
+}
+
 // LoadPlugins загружает плагины
 func (r *Runtime) LoadPlugins() error {
 	r.log.Info("Loading plugins...")
@@ -282,6 +302,9 @@ func (r *Runtime) LoadPlugins() error {
 			runtime: r,
 			plugin:  plugin,
 		}
+
+		// Регистрируем или обновляем запись о плагине в БД (до Init, чтобы plugin_data имел валидный FK)
+		r.upsertPluginRecord(plugin.Name(), plugin.Name(), plugin.Version(), true)
 
 		// Инициализируем плагин
 		if err := plugin.Init(coreAPI); err != nil {
